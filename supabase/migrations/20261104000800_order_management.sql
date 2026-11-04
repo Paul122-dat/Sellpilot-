@@ -159,6 +159,7 @@ begin
           and sm.reference = old.id::text
           and sm.movement_type = 'sale'
         group by sm.product_id
+        order by sm.product_id
       loop
         insert into public.stock_movements (
           business_id, product_id, movement_type, quantity_change,
