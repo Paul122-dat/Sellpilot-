@@ -237,7 +237,7 @@ $$;
 revoke all on function private.handle_order_status_change() from public, anon, authenticated;
 
 create trigger orders_status_lifecycle
-before update of order_status on public.orders
+after update of order_status on public.orders
 for each row execute function private.handle_order_status_change();
 
 -- Archived stock may be restored only as the exact reversal of a sale created
