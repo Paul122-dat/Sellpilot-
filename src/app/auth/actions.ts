@@ -14,7 +14,16 @@ function readText(formData: FormData, key: string) {
 }
 
 function validEmail(email: string) {
-  return email.includes("@") && email.lastIndexOf(".") > email.indexOf("@");
+  const parts = email.split("@");
+  if (parts.length !== 2) return false;
+  const [localPart, domain] = parts;
+  const lastDot = domain.lastIndexOf(".");
+  return (
+    localPart.length > 0 &&
+    !email.includes(" ") &&
+    lastDot > 0 &&
+    lastDot < domain.length - 1
+  );
 }
 
 export async function signUp(
