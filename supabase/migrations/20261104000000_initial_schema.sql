@@ -433,6 +433,48 @@ create trigger recalculate_order_after_item_change
 after insert or update or delete on public.order_items
 for each row execute function private.recalculate_order_subtotal();
 
+-- Prevent clients from supplying a made-up subtotal. It must equal the sum
+-- of the saved order-item snapshots. The initial order header starts at zero.
+create or replace function private.validate_order_totals()
+returns trigger
+language plpgsql
+set search_path = ''
+as $
+declare
+  v_items_subtotal numeric(14,2);
+begin
+  if tg_op = 'INSERT' then
+    if new.subtotal_amount <> 0 then
+      raise exception 'Order subtotal is calculated from order items.';
+    end if;
+  else
+    if new.currency_code is distinct from old.currency_code then
+      raise exception 'Order currency cannot be changed after creation.';
+    end if;
+
+    if new.subtotal_amount is distinct from old.subtotal_amount then
+      select coalesce(sum(oi.line_total), 0)
+        into v_items_subtotal
+      from public.order_items oi
+      where oi.order_id = new.id
+        and oi.business_id = new.business_id;
+
+      if new.subtotal_amount is distinct from v_items_subtotal then
+        raise exception 'Order subtotal must equal the sum of its order items.';
+      end if;
+    end if;
+  end if;
+
+  return new;
+end;
+$;
+
+revoke all on function private.validate_order_totals() from public, anon, authenticated;
+
+create trigger validate_order_totals_before_write
+before insert or update on public.orders
+for each row execute function private.validate_order_totals();
+
 create table public.payments (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.businesses(id) on delete cascade,
