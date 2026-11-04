@@ -7,7 +7,7 @@ The initial SellPilot schema is split into four smaller SQL scripts to make setu
 3. `migrations/20261104000300_financial_ledgers_and_views.sql`
 4. `migrations/20261104000400_updated_at_rls_and_grants.sql`
 
-The optional product-photo feature requires two additional migrations. Run both in order when setting up the Product & Inventory feature:
+The Product & Inventory feature requires three additional migrations. Run all three in order after the four core schema migrations when setting up a new database:
 
 5. `migrations/20261104000500_product_image_storage.sql`
 6. `migrations/20261104000600_simplify_product_image_storage_policies.sql`
