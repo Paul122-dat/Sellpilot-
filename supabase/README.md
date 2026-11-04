@@ -11,8 +11,9 @@ The optional product-photo feature requires two additional migrations. Run both 
 
 5. `migrations/20261104000500_product_image_storage.sql`
 6. `migrations/20261104000600_simplify_product_image_storage_policies.sql`
+7. `migrations/20261104000700_prevent_archived_product_stock_changes.sql`
 
-The sixth migration replaces the initial Storage policy checks with UUID-validated business-membership checks. It is required for the current direct browser-to-Storage upload flow.
+The sixth migration replaces the initial Storage policy checks with UUID-validated business-membership checks. It is required for the current direct browser-to-Storage upload flow. The seventh migration updates the stock-validation trigger so archived products cannot receive stock movements, including requests that bypass the application interface.
 
 Each script is a separate transaction. Wait for the success message after each part before running the next. If any part reports an error, stop there and share the exact error. Do not continue to later parts and do not rerun a successful part.
 
@@ -27,7 +28,7 @@ Each script is a separate transaction. Wait for the success message after each p
 - Row Level Security policies for every public table.
 - Private authorization and validation trigger functions.
 
-The fifth migration creates a private Supabase Storage bucket for product photos and adds the image path to product records. The sixth migration defines the final private Storage access policies, scoped to members of the owning business.
+The fifth migration creates a private Supabase Storage bucket for product photos and adds the image path to product records. The sixth migration defines the final private Storage access policies, scoped to members of the owning business. The seventh migration blocks stock movements for archived products at database level.
 
 ## Data rules
 
