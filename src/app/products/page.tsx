@@ -25,7 +25,7 @@ export default async function ProductsPage() {
   const [{ data: products, error: productsError }, { data: stock, error: stockError }] = await Promise.all([
     supabase
       .from("products")
-      .select("id, business_id, name, sku, description, selling_price, cost_price, track_inventory, low_stock_threshold, is_archived, created_at")
+      .select("id, business_id, name, sku, description, selling_price, cost_price, track_inventory, low_stock_threshold, is_archived, image_path, created_at")
       .eq("business_id", membership.business_id)
       .order("created_at", { ascending: false }),
     supabase
@@ -38,11 +38,30 @@ export default async function ProductsPage() {
     return <main className="min-h-screen bg-[var(--surface)] p-6"><p className="mx-auto max-w-3xl rounded-2xl bg-white p-6 text-sm text-slate-600">We couldn't load your product records. Please refresh and try again.</p></main>;
   }
 
+  const imagePaths = (products ?? [])
+    .map((product) => product.image_path)
+    .filter((path): path is string => Boolean(path));
+
+  const signedImages = imagePaths.length > 0
+    ? await supabase.storage.from("product-images").createSignedUrls(imagePaths, 60 * 60)
+    : { data: [], error: null };
+
+  if (signedImages.error) {
+    return <main className="min-h-screen bg-[var(--surface)] p-6"><p className="mx-auto max-w-3xl rounded-2xl bg-white p-6 text-sm text-slate-600">We couldn't load product images. Please refresh and try again.</p></main>;
+  }
+
+  const imageUrlByPath = new Map(
+    (signedImages.data ?? [])
+      .filter((image) => Boolean(image.signedUrl))
+      .map((image) => [image.path, image.signedUrl as string]),
+  );
   const stockByProduct = new Map((stock ?? []).map((row) => [row.product_id, row]));
+
   const records: ProductRecord[] = (products ?? []).map((product) => {
     const level = stockByProduct.get(product.id);
     return {
       ...product,
+      image_url: product.image_path ? imageUrlByPath.get(product.image_path) ?? null : null,
       stock_on_hand: level?.stock_on_hand ?? null,
       stock_status: level?.stock_status ?? (product.track_inventory ? "low_stock" : "not_tracked"),
     } as ProductRecord;
@@ -55,7 +74,7 @@ export default async function ProductsPage() {
         <div className="mt-5">
           <p className="text-sm font-medium text-[var(--orange)]">Workspace</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-[var(--navy)]">Products & stock</h1>
-          <p className="mt-2 text-sm text-slate-500">Manage your catalogue, selling prices and stock records.</p>
+          <p className="mt-2 text-sm text-slate-500">Manage your catalogue, product photos, selling prices and stock records.</p>
         </div>
         <div className="mt-7"><ProductManager initialProducts={records} /></div>
       </div>
