@@ -28,5 +28,8 @@ npm run dev
 
 Add your Supabase project URL and publishable key to `.env.local`. Never commit real credentials. Do not expose Supabase secret/service-role keys in browser code.
 
+## Authentication progress
+Email/password sign-up, sign-in, email confirmation callback, sign-out, server-side dashboard protection, and first-business onboarding have been added. Live authentication testing is still pending.
+
 ## Current status
 The frontend foundation and Supabase client helpers are in place. Database schema, authentication flows, row-level security policies, AI, notifications, payments and social integrations are not active until implemented and verified. Never treat sample data as real seller financial records.
