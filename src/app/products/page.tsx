@@ -72,7 +72,7 @@ export default async function ProductsPage() {
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-[var(--navy)]">Products & stock</h1>
           <p className="mt-2 text-sm text-slate-500">Manage your catalogue, product photos, selling prices and stock records.</p>
         </div>
-        <div className="mt-7"><ProductManager initialProducts={records} /></div>
+        <div className="mt-7"><ProductManager initialProducts={records} businessId={membership.business_id} /></div>
       </div>
     </main>
   );
