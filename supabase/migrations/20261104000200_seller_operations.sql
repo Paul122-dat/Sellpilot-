@@ -289,7 +289,7 @@ create or replace function private.validate_order_totals()
 returns trigger
 language plpgsql
 set search_path = ''
-as $
+as $$
 declare
   v_items_subtotal numeric(14,2);
 begin
@@ -317,7 +317,7 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 revoke all on function private.validate_order_totals() from public, anon, authenticated;
 
