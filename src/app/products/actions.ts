@@ -3,6 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+const IMAGE_BUCKET = "product-images";
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
 export type ProductActionResult = { error?: string };
 
 async function getAuthorizedWorkspace() {
@@ -36,10 +44,18 @@ function readText(formData: FormData, key: string, max: number) {
 function readMoney(formData: FormData, key: string, required: boolean) {
   const raw = String(formData.get(key) ?? "").trim();
   if (!raw && !required) return { value: null as number | null };
-  if (!raw || !/^\d{1,12}(\.\d{1,2})?$/.test(raw)) return { error: "Enter a valid amount with up to two decimal places." };
+  if (!raw || !/^\\d{1,12}(\\.\\d{1,2})?$/.test(raw)) return { error: "Enter a valid amount with up to two decimal places." };
   const value = Number(raw);
   if (!Number.isFinite(value) || value < 0 || value > 999999999999.99) return { error: "Enter a valid amount." };
   return { value };
+}
+
+function readProductImage(formData: FormData) {
+  const value = formData.get("image");
+  if (!(value instanceof File) || value.size === 0) return { image: null as File | null };
+  if (!IMAGE_EXTENSIONS[value.type]) return { error: "Use a JPG, PNG or WebP product image." };
+  if (value.size > MAX_IMAGE_BYTES) return { error: "Product images must be 5 MB or smaller." };
+  return { image: value };
 }
 
 function validateProduct(formData: FormData) {
@@ -48,6 +64,7 @@ function validateProduct(formData: FormData) {
   const description = readText(formData, "description", 2000);
   const selling = readMoney(formData, "selling_price", true);
   const cost = readMoney(formData, "cost_price", false);
+  const imageResult = readProductImage(formData);
   const thresholdRaw = String(formData.get("low_stock_threshold") ?? "5").trim();
   const threshold = Number(thresholdRaw);
   const trackInventory = formData.get("track_inventory") === "on";
@@ -55,7 +72,8 @@ function validateProduct(formData: FormData) {
   if (!name) return { error: "Enter a product name." } as const;
   if ("error" in selling) return selling;
   if ("error" in cost) return cost;
-  if (!/^\d{1,6}$/.test(thresholdRaw) || !Number.isSafeInteger(threshold) || threshold < 0) {
+  if ("error" in imageResult) return imageResult;
+  if (!/^\\d{1,6}$/.test(thresholdRaw) || !Number.isSafeInteger(threshold) || threshold < 0) {
     return { error: "Enter a whole-number low-stock threshold (0 or more)." } as const;
   }
 
@@ -69,7 +87,25 @@ function validateProduct(formData: FormData) {
       track_inventory: trackInventory,
       low_stock_threshold: threshold,
     },
+    image: imageResult.image,
   } as const;
+}
+
+async function uploadProductImage(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  businessId: string,
+  productId: string,
+  image: File,
+) {
+  const extension = IMAGE_EXTENSIONS[image.type];
+  const path = `${businessId}/${productId}/${crypto.randomUUID()}.${extension}`;
+  const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, image, {
+    cacheControl: "3600",
+    contentType: image.type,
+    upsert: false,
+  });
+  if (error) return { error: "We couldn't upload that image. Please try another JPG, PNG or WebP file." } as const;
+  return { path } as const;
 }
 
 export async function createProduct(formData: FormData): Promise<ProductActionResult> {
@@ -78,13 +114,25 @@ export async function createProduct(formData: FormData): Promise<ProductActionRe
   const workspace = await getAuthorizedWorkspace();
   if ("error" in workspace) return workspace;
 
+  const productId = crypto.randomUUID();
+  let imagePath: string | null = null;
+
+  if (validated.image) {
+    const uploaded = await uploadProductImage(workspace.supabase, workspace.businessId, productId, validated.image);
+    if ("error" in uploaded) return uploaded;
+    imagePath = uploaded.path;
+  }
+
   const { error } = await workspace.supabase.from("products").insert({
+    id: productId,
     ...validated.values,
+    image_path: imagePath,
     business_id: workspace.businessId,
     created_by: workspace.userId,
   });
 
   if (error) {
+    if (imagePath) await workspace.supabase.storage.from(IMAGE_BUCKET).remove([imagePath]);
     if (error.code === "23505") return { error: "That SKU is already used by another product." };
     return { error: "We couldn't save this product. Check the details and try again." };
   }
@@ -101,19 +149,43 @@ export async function updateProduct(productId: string, formData: FormData): Prom
   const workspace = await getAuthorizedWorkspace();
   if ("error" in workspace) return workspace;
 
+  const { data: existing, error: readError } = await workspace.supabase
+    .from("products")
+    .select("image_path")
+    .eq("id", productId)
+    .eq("business_id", workspace.businessId)
+    .maybeSingle();
+
+  if (readError || !existing) return { error: "We couldn't find that product in your workspace." };
+
+  let newImagePath: string | null = null;
+  if (validated.image) {
+    const uploaded = await uploadProductImage(workspace.supabase, workspace.businessId, productId, validated.image);
+    if ("error" in uploaded) return uploaded;
+    newImagePath = uploaded.path;
+  }
+
+  const updateValues = newImagePath
+    ? { ...validated.values, image_path: newImagePath }
+    : validated.values;
+
   const { data, error } = await workspace.supabase
     .from("products")
-    .update(validated.values)
+    .update(updateValues)
     .eq("id", productId)
     .eq("business_id", workspace.businessId)
     .select("id")
     .maybeSingle();
 
-  if (error) {
-    if (error.code === "23505") return { error: "That SKU is already used by another product." };
+  if (error || !data) {
+    if (newImagePath) await workspace.supabase.storage.from(IMAGE_BUCKET).remove([newImagePath]);
+    if (error?.code === "23505") return { error: "That SKU is already used by another product." };
     return { error: "We couldn't update this product. Refresh and try again." };
   }
-  if (!data) return { error: "We couldn't find that product in your workspace." };
+
+  if (newImagePath && existing.image_path) {
+    await workspace.supabase.storage.from(IMAGE_BUCKET).remove([existing.image_path]);
+  }
 
   revalidatePath("/products");
   revalidatePath("/");
@@ -147,7 +219,7 @@ export async function recordStockAdjustment(formData: FormData): Promise<Product
 
   if (!/^[0-9a-f-]{36}$/i.test(productId)) return { error: "Choose a valid product." };
   if (direction !== "add" && direction !== "remove") return { error: "Choose whether to add or remove stock." };
-  if (!/^\d{1,6}$/.test(quantityRaw) || Number(quantityRaw) < 1) return { error: "Enter a whole quantity greater than zero." };
+  if (!/^\\d{1,6}$/.test(quantityRaw) || Number(quantityRaw) < 1) return { error: "Enter a whole quantity greater than zero." };
 
   const quantity = Number(quantityRaw) * (direction === "add" ? 1 : -1);
   const workspace = await getAuthorizedWorkspace();
