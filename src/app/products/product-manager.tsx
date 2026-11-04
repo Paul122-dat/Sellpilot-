@@ -2,7 +2,22 @@
 
 import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { archiveProduct, createProduct, recordStockAdjustment, updateProduct } from "./actions";
+import {
+  archiveProduct,
+  attachProductImage,
+  createProduct,
+  recordStockAdjustment,
+  updateProduct,
+} from "./actions";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+
+const IMAGE_BUCKET = "product-images";
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
 
 export type ProductRecord = {
   id: string;
@@ -35,7 +50,13 @@ function money(value: number) {
   return new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(value);
 }
 
-export default function ProductManager({ initialProducts }: { initialProducts: ProductRecord[] }) {
+export default function ProductManager({
+  initialProducts,
+  businessId,
+}: {
+  initialProducts: ProductRecord[];
+  businessId: string;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -92,18 +113,93 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
   function submitProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    const data = new FormData(event.currentTarget);
+
+    const formElement = event.currentTarget;
+    const data = new FormData(formElement);
+    const selectedFile = data.get("image");
+    const imageFile = selectedFile instanceof File && selectedFile.size > 0
+      ? selectedFile
+      : null;
+    const productBeingEdited = editing;
+    data.delete("image");
+
+    if (imageFile && !IMAGE_EXTENSIONS[imageFile.type]) {
+      setError("Use a JPG, PNG or WebP product image.");
+      return;
+    }
+    if (imageFile && imageFile.size > MAX_IMAGE_BYTES) {
+      setError("Product images must be 5 MB or smaller.");
+      return;
+    }
+
     startTransition(async () => {
-      const result = editing ? await updateProduct(editing.id, data) : await createProduct(data);
-      if (result.error) {
-        setError(result.error);
-        return;
+      try {
+        const result = productBeingEdited
+          ? await updateProduct(productBeingEdited.id, data)
+          : await createProduct(data);
+
+        if (result.error || !result.productId) {
+          setError(result.error ?? "We couldn't save this product. Please try again.");
+          return;
+        }
+
+        if (imageFile) {
+          const extension = IMAGE_EXTENSIONS[imageFile.type];
+          const path = businessId + "/" + result.productId + "/" + crypto.randomUUID() + "." + extension;
+          const supabase = createSupabaseBrowserClient();
+          const { error: uploadError } = await supabase.storage.from(IMAGE_BUCKET).upload(path, imageFile, {
+            cacheControl: "3600",
+            contentType: imageFile.type,
+            upsert: false,
+          });
+
+          if (uploadError) {
+            console.error("SellPilot product photo upload failed.", {
+              statusCode: uploadError.statusCode,
+              message: uploadError.message,
+            });
+            if (!productBeingEdited) {
+              setEditing(null);
+              setForm(emptyForm);
+              setImagePreview(null);
+              setFormVersion((version) => version + 1);
+            }
+            setError(
+              productBeingEdited
+                ? "Product details were saved, but the photo could not be uploaded. Your existing photo was kept; please try the new photo again."
+                : "The product was saved, but its photo could not be uploaded. Find the product in the catalogue and edit it to try the photo again.",
+            );
+            router.refresh();
+            return;
+          }
+
+          const attachResult = await attachProductImage(result.productId, path);
+          if (attachResult.error) {
+            await supabase.storage.from(IMAGE_BUCKET).remove([path]);
+            if (!productBeingEdited) {
+              setEditing(null);
+              setForm(emptyForm);
+              setImagePreview(null);
+              setFormVersion((version) => version + 1);
+            }
+            setError(
+              productBeingEdited
+                ? "Product details were saved, but we couldn't attach the new photo. Your existing photo was kept."
+                : "The product was saved, but we couldn't attach its photo. Find the product in the catalogue and try again.",
+            );
+            router.refresh();
+            return;
+          }
+        }
+
+        setEditing(null);
+        setForm(emptyForm);
+        setImagePreview(null);
+        setFormVersion((version) => version + 1);
+        router.refresh();
+      } catch {
+        setError("We couldn't save the product. Check your connection and try again.");
       }
-      setEditing(null);
-      setForm(emptyForm);
-      setImagePreview(null);
-      setFormVersion((version) => version + 1);
-      router.refresh();
     });
   }
 
@@ -130,6 +226,10 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
       if (result.error) setError(result.error);
       else {
         setEditing(null);
+        setForm(emptyForm);
+        setImagePreview(null);
+        setFormVersion((version) => version + 1);
+        setError("");
         router.refresh();
       }
     });
