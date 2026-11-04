@@ -7,9 +7,12 @@ The initial SellPilot schema is split into four smaller SQL scripts to make setu
 3. `migrations/20261104000300_financial_ledgers_and_views.sql`
 4. `migrations/20261104000400_updated_at_rls_and_grants.sql`
 
-The optional product-photo feature adds a fifth migration. Run it only when the Product & Inventory pull request is ready for preview testing:
+The optional product-photo feature requires two additional migrations. Run both in order when setting up the Product & Inventory feature:
 
 5. `migrations/20261104000500_product_image_storage.sql`
+6. `migrations/20261104000600_simplify_product_image_storage_policies.sql`
+
+The sixth migration replaces the initial Storage policy checks with UUID-validated business-membership checks. It is required for the current direct browser-to-Storage upload flow.
 
 Each script is a separate transaction. Wait for the success message after each part before running the next. If any part reports an error, stop there and share the exact error. Do not continue to later parts and do not rerun a successful part.
 
@@ -24,7 +27,7 @@ Each script is a separate transaction. Wait for the success message after each p
 - Row Level Security policies for every public table.
 - Private authorization and validation trigger functions.
 
-The fifth migration creates a private Supabase Storage bucket for product photos, adds the image path to product records, and scopes image access to members of the owning business.
+The fifth migration creates a private Supabase Storage bucket for product photos and adds the image path to product records. The sixth migration defines the final private Storage access policies, scoped to members of the owning business.
 
 ## Data rules
 
