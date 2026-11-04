@@ -574,7 +574,7 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 revoke all on function private.validate_refund_entry() from public, anon, authenticated;
 
