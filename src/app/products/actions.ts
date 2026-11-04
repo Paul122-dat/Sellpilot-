@@ -263,6 +263,31 @@ export async function archiveProduct(productId: string): Promise<ProductActionRe
   return {};
 }
 
+export async function restoreProduct(productId: string): Promise<ProductActionResult> {
+  if (!/^[0-9a-f-]{36}$/i.test(productId)) {
+    return { error: "That product record is not valid." };
+  }
+
+  const workspace = await getAuthorizedWorkspace();
+  if ("error" in workspace) return workspace;
+
+  const { data, error } = await workspace.supabase
+    .from("products")
+    .update({ is_archived: false })
+    .eq("id", productId)
+    .eq("business_id", workspace.businessId)
+    .select("id")
+    .maybeSingle();
+
+  if (error || !data) {
+    return { error: "We couldn't restore this product. Refresh and try again." };
+  }
+
+  revalidatePath("/products");
+  revalidatePath("/");
+  return {};
+}
+
 export async function recordStockAdjustment(formData: FormData): Promise<ProductActionResult> {
   const productId = String(formData.get("product_id") ?? "").trim();
   const direction = String(formData.get("direction") ?? "");
