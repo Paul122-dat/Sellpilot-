@@ -59,7 +59,7 @@ function readMoney(
 ): ValidationResult<number | null> {
   const raw = String(formData.get(key) ?? "").trim();
   if (!raw && !required) return { ok: true, value: null };
-  if (!raw || !/^\\d{1,12}(\\.\\d{1,2})?$/.test(raw)) {
+  if (!raw || !/^\d{1,12}(\.\d{1,2})?$/.test(raw)) {
     return { ok: false, error: "Enter a valid amount with up to two decimal places." };
   }
 
@@ -86,7 +86,7 @@ function validateProduct(formData: FormData): ValidationResult<ProductValues> {
     return { ok: false, error: "Enter a valid selling price." };
   }
   if (!cost.ok) return cost;
-  if (!/^\\d{1,6}$/.test(thresholdRaw) || !Number.isSafeInteger(threshold) || threshold < 0) {
+  if (!/^\d{1,6}$/.test(thresholdRaw) || !Number.isSafeInteger(threshold) || threshold < 0) {
     return { ok: false, error: "Enter a whole-number low-stock threshold (0 or more)." };
   }
 
@@ -186,7 +186,7 @@ export async function attachProductImage(
   }
 
   const fileName = imagePath.slice(prefix.length);
-  if (!/^[0-9a-f-]{36}\\.(jpg|png|webp)$/i.test(fileName)) {
+  if (!/^[0-9a-f-]{36}\.(jpg|png|webp)$/i.test(fileName)) {
     return { error: "That product photo file is not valid." };
   }
 
@@ -273,7 +273,7 @@ export async function recordStockAdjustment(formData: FormData): Promise<Product
   if (direction !== "add" && direction !== "remove") {
     return { error: "Choose whether to add or remove stock." };
   }
-  if (!/^\\d{1,6}$/.test(quantityRaw) || Number(quantityRaw) < 1) {
+  if (!/^\d{1,6}$/.test(quantityRaw) || Number(quantityRaw) < 1) {
     return { error: "Enter a whole quantity greater than zero." };
   }
 
