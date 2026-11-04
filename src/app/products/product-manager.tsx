@@ -154,6 +154,10 @@ export default function ProductManager({
           });
 
           if (uploadError) {
+            const uploadReason = [
+              uploadError.statusCode ? `HTTP ${uploadError.statusCode}` : "",
+              uploadError.message?.trim().slice(0, 180) ?? "",
+            ].filter(Boolean).join(" — ");
             console.error("SellPilot product photo upload failed.", {
               statusCode: uploadError.statusCode,
               message: uploadError.message,
@@ -166,8 +170,8 @@ export default function ProductManager({
             }
             setError(
               productBeingEdited
-                ? "Product details were saved, but the photo could not be uploaded. Your existing photo was kept; please try the new photo again."
-                : "The product was saved, but its photo could not be uploaded. Find the product in the catalogue and edit it to try the photo again.",
+                ? `Product details were saved, but the photo upload failed${uploadReason ? ` (${uploadReason})` : ""}. Your existing photo was kept.`
+                : `The product was saved, but its photo upload failed${uploadReason ? ` (${uploadReason})` : ""}. Find the product in the catalogue and edit it to try again.`,
             );
             router.refresh();
             return;
