@@ -4,14 +4,11 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const IMAGE_BUCKET = "product-images";
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const IMAGE_EXTENSIONS: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-};
 
-export type ProductActionResult = { error?: string };
+export type ProductActionResult = {
+  error?: string;
+  productId?: string;
+};
 
 type ValidationResult<T> =
   | { ok: true; value: T }
@@ -25,11 +22,6 @@ type ProductValues = {
   cost_price: number | null;
   track_inventory: boolean;
   low_stock_threshold: number;
-};
-
-type ValidatedProduct = {
-  values: ProductValues;
-  image: File | null;
 };
 
 async function getAuthorizedWorkspace() {
@@ -67,7 +59,7 @@ function readMoney(
 ): ValidationResult<number | null> {
   const raw = String(formData.get(key) ?? "").trim();
   if (!raw && !required) return { ok: true, value: null };
-  if (!raw || !/^\d{1,12}(\.\d{1,2})?$/.test(raw)) {
+  if (!raw || !/^\\d{1,12}(\\.\\d{1,2})?$/.test(raw)) {
     return { ok: false, error: "Enter a valid amount with up to two decimal places." };
   }
 
@@ -78,25 +70,12 @@ function readMoney(
   return { ok: true, value };
 }
 
-function readProductImage(formData: FormData): ValidationResult<File | null> {
-  const value = formData.get("image");
-  if (!(value instanceof File) || value.size === 0) return { ok: true, value: null };
-  if (!IMAGE_EXTENSIONS[value.type]) {
-    return { ok: false, error: "Use a JPG, PNG or WebP product image." };
-  }
-  if (value.size > MAX_IMAGE_BYTES) {
-    return { ok: false, error: "Product images must be 5 MB or smaller." };
-  }
-  return { ok: true, value };
-}
-
-function validateProduct(formData: FormData): ValidationResult<ValidatedProduct> {
+function validateProduct(formData: FormData): ValidationResult<ProductValues> {
   const name = readText(formData, "name", 160);
   const sku = readText(formData, "sku", 80);
   const description = readText(formData, "description", 2000);
   const selling = readMoney(formData, "selling_price", true);
   const cost = readMoney(formData, "cost_price", false);
-  const image = readProductImage(formData);
   const thresholdRaw = String(formData.get("low_stock_threshold") ?? "5").trim();
   const threshold = Number(thresholdRaw);
   const trackInventory = formData.get("track_inventory") === "on";
@@ -107,45 +86,22 @@ function validateProduct(formData: FormData): ValidationResult<ValidatedProduct>
     return { ok: false, error: "Enter a valid selling price." };
   }
   if (!cost.ok) return cost;
-  if (!image.ok) return image;
-  if (!/^\d{1,6}$/.test(thresholdRaw) || !Number.isSafeInteger(threshold) || threshold < 0) {
+  if (!/^\\d{1,6}$/.test(thresholdRaw) || !Number.isSafeInteger(threshold) || threshold < 0) {
     return { ok: false, error: "Enter a whole-number low-stock threshold (0 or more)." };
   }
 
   return {
     ok: true,
     value: {
-      values: {
-        name,
-        sku,
-        description,
-        selling_price: selling.value,
-        cost_price: cost.value,
-        track_inventory: trackInventory,
-        low_stock_threshold: threshold,
-      },
-      image: image.value,
+      name,
+      sku,
+      description,
+      selling_price: selling.value,
+      cost_price: cost.value,
+      track_inventory: trackInventory,
+      low_stock_threshold: threshold,
     },
   };
-}
-
-async function uploadProductImage(
-  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-  businessId: string,
-  productId: string,
-  image: File,
-): Promise<ValidationResult<string>> {
-  const extension = IMAGE_EXTENSIONS[image.type];
-  const path = businessId + "/" + productId + "/" + crypto.randomUUID() + "." + extension;
-  const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, image, {
-    cacheControl: "3600",
-    contentType: image.type,
-    upsert: false,
-  });
-  if (error) {
-    return { ok: false, error: "We couldn't upload that image. Please try another JPG, PNG or WebP file." };
-  }
-  return { ok: true, value: path };
 }
 
 export async function createProduct(formData: FormData): Promise<ProductActionResult> {
@@ -156,36 +112,22 @@ export async function createProduct(formData: FormData): Promise<ProductActionRe
   if ("error" in workspace) return workspace;
 
   const productId = crypto.randomUUID();
-  let imagePath: string | null = null;
-
-  if (validation.value.image) {
-    const uploaded = await uploadProductImage(
-      workspace.supabase,
-      workspace.businessId,
-      productId,
-      validation.value.image,
-    );
-    if (!uploaded.ok) return { error: uploaded.error };
-    imagePath = uploaded.value;
-  }
-
   const { error } = await workspace.supabase.from("products").insert({
     id: productId,
-    ...validation.value.values,
-    image_path: imagePath,
+    ...validation.value,
+    image_path: null,
     business_id: workspace.businessId,
     created_by: workspace.userId,
   });
 
   if (error) {
-    if (imagePath) await workspace.supabase.storage.from(IMAGE_BUCKET).remove([imagePath]);
     if (error.code === "23505") return { error: "That SKU is already used by another product." };
     return { error: "We couldn't save this product. Check the details and try again." };
   }
 
   revalidatePath("/products");
   revalidatePath("/");
-  return {};
+  return { productId };
 }
 
 export async function updateProduct(
@@ -202,6 +144,52 @@ export async function updateProduct(
   const workspace = await getAuthorizedWorkspace();
   if ("error" in workspace) return workspace;
 
+  const { data, error } = await workspace.supabase
+    .from("products")
+    .update(validation.value)
+    .eq("id", productId)
+    .eq("business_id", workspace.businessId)
+    .select("id")
+    .maybeSingle();
+
+  if (error || !data) {
+    if (error?.code === "23505") {
+      return { error: "That SKU is already used by another product." };
+    }
+    return { error: "We couldn't update this product. Refresh and try again." };
+  }
+
+  revalidatePath("/products");
+  revalidatePath("/");
+  return { productId };
+}
+
+/**
+ * Links an image that the signed-in browser has already uploaded directly to
+ * the private Storage bucket. The object key is constrained to this workspace
+ * and product, and Storage is checked before the database path is changed.
+ */
+export async function attachProductImage(
+  productId: string,
+  imagePath: string,
+): Promise<ProductActionResult> {
+  if (!/^[0-9a-f-]{36}$/i.test(productId)) {
+    return { error: "That product record is not valid." };
+  }
+
+  const workspace = await getAuthorizedWorkspace();
+  if ("error" in workspace) return workspace;
+
+  const prefix = workspace.businessId + "/" + productId + "/";
+  if (!imagePath.startsWith(prefix)) {
+    return { error: "That product photo does not belong to this workspace." };
+  }
+
+  const fileName = imagePath.slice(prefix.length);
+  if (!/^[0-9a-f-]{36}\\.(jpg|png|webp)$/i.test(fileName)) {
+    return { error: "That product photo file is not valid." };
+  }
+
   const { data: existing, error: readError } = await workspace.supabase
     .from("products")
     .select("image_path")
@@ -213,45 +201,41 @@ export async function updateProduct(
     return { error: "We couldn't find that product in your workspace." };
   }
 
-  let newImagePath: string | null = null;
-  if (validation.value.image) {
-    const uploaded = await uploadProductImage(
-      workspace.supabase,
-      workspace.businessId,
-      productId,
-      validation.value.image,
-    );
-    if (!uploaded.ok) return { error: uploaded.error };
-    newImagePath = uploaded.value;
-  }
+  const { data: objects, error: storageError } = await workspace.supabase.storage
+    .from(IMAGE_BUCKET)
+    .list(workspace.businessId + "/" + productId, { limit: 100, search: fileName });
 
-  const updateValues = newImagePath
-    ? { ...validation.value.values, image_path: newImagePath }
-    : validation.value.values;
+  if (storageError || !objects?.some((object) => object.name === fileName)) {
+    return { error: "We couldn't verify the uploaded photo. Please try again." };
+  }
 
   const { data, error } = await workspace.supabase
     .from("products")
-    .update(updateValues)
+    .update({ image_path: imagePath })
     .eq("id", productId)
     .eq("business_id", workspace.businessId)
     .select("id")
     .maybeSingle();
 
   if (error || !data) {
-    if (newImagePath) await workspace.supabase.storage.from(IMAGE_BUCKET).remove([newImagePath]);
-    if (error?.code === "23505") {
-      return { error: "That SKU is already used by another product." };
-    }
-    return { error: "We couldn't update this product. Refresh and try again." };
+    return { error: "The photo uploaded, but we couldn't attach it to the product." };
   }
 
-  if (newImagePath && existing.image_path) {
-    await workspace.supabase.storage.from(IMAGE_BUCKET).remove([existing.image_path]);
+  if (existing.image_path && existing.image_path !== imagePath) {
+    const { error: deleteError } = await workspace.supabase.storage
+      .from(IMAGE_BUCKET)
+      .remove([existing.image_path]);
+    if (deleteError) {
+      console.error("SellPilot could not remove a replaced product photo.", {
+        productId,
+        statusCode: deleteError.statusCode,
+      });
+    }
   }
 
   revalidatePath("/products");
   revalidatePath("/");
-  return {};
+  return { productId };
 }
 
 export async function archiveProduct(productId: string): Promise<ProductActionResult> {
@@ -289,7 +273,7 @@ export async function recordStockAdjustment(formData: FormData): Promise<Product
   if (direction !== "add" && direction !== "remove") {
     return { error: "Choose whether to add or remove stock." };
   }
-  if (!/^\d{1,6}$/.test(quantityRaw) || Number(quantityRaw) < 1) {
+  if (!/^\\d{1,6}$/.test(quantityRaw) || Number(quantityRaw) < 1) {
     return { error: "Enter a whole quantity greater than zero." };
   }
 
