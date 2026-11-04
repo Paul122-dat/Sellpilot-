@@ -306,6 +306,23 @@ export async function recordStockAdjustment(formData: FormData): Promise<Product
   const workspace = await getAuthorizedWorkspace();
   if ("error" in workspace) return workspace;
 
+  // Give the seller a clear message before attempting the insert. The database
+  // trigger repeats this check while holding the product row lock, so a request
+  // cannot bypass the archived-state rule or race an archive operation.
+  const { data: product, error: productError } = await workspace.supabase
+    .from("products")
+    .select("is_archived")
+    .eq("id", productId)
+    .eq("business_id", workspace.businessId)
+    .maybeSingle();
+
+  if (productError || !product) {
+    return { error: "We couldn't verify this product. Refresh and try again." };
+  }
+  if (product.is_archived) {
+    return { error: "Archived products cannot have stock adjusted. Restore the product first." };
+  }
+
   const { error } = await workspace.supabase.from("stock_movements").insert({
     business_id: workspace.businessId,
     product_id: productId,
@@ -321,6 +338,9 @@ export async function recordStockAdjustment(formData: FormData): Promise<Product
     }
     if (error.message?.includes("does not have tracked inventory")) {
       return { error: "Inventory tracking is turned off for this product." };
+    }
+    if (error.message?.includes("product is archived")) {
+      return { error: "Archived products cannot have stock adjusted. Restore the product first." };
     }
     return { error: "We couldn't record this stock adjustment. Check the product and quantity." };
   }
