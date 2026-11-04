@@ -164,15 +164,15 @@ export default function OrderManager({
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-3">
         <article className="rounded-2xl border border-[var(--line)] bg-white p-4">
-          <p className="text-xs font-medium text-slate-500">Orders recorded</p>
+          <p className="text-xs font-medium text-slate-500">Orders in this view</p>
           <p className="mt-2 text-2xl font-bold text-[var(--navy)]">{orders.length}</p>
         </article>
         <article className="rounded-2xl border border-[var(--line)] bg-white p-4">
-          <p className="text-xs font-medium text-slate-500">Active orders</p>
+          <p className="text-xs font-medium text-slate-500">Active in this view</p>
           <p className="mt-2 text-2xl font-bold text-[var(--navy)]">{activeOrders.length}</p>
         </article>
         <article className="rounded-2xl border border-[var(--line)] bg-white p-4">
-          <p className="text-xs font-medium text-slate-500">Outstanding on active orders</p>
+          <p className="text-xs font-medium text-slate-500">Outstanding in this view</p>
           <p className="mt-2 text-xl font-bold text-[var(--navy)]">{money(outstandingAmount)}</p>
         </article>
       </div>
@@ -214,7 +214,7 @@ export default function OrderManager({
               </button>
             ))}
           </div>
-          <p className="mt-4 border-t border-[var(--line)] pt-3 text-[11px] leading-5 text-slate-400">Showing the latest 100 orders. Older records remain saved and will be available through future date filters.</p>
+          <p className="mt-4 border-t border-[var(--line)] pt-3 text-[11px] leading-5 text-slate-400">The list and summary cards use the latest 100 orders. Older records remain saved and will be available through future date filters.</p>
         </section>
 
         <section className="rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm sm:p-6">
