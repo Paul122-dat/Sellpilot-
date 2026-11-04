@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createCustomer, updateCustomer } from "./actions";
 
@@ -34,6 +34,10 @@ export default function CustomerManager({ initialCustomers }: { initialCustomers
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setCustomers(initialCustomers);
+  }, [initialCustomers]);
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
