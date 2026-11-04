@@ -232,6 +232,10 @@ declare
   v_tracks_inventory boolean;
   v_current_stock bigint;
 begin
+  if not private.has_business_access(new.business_id) then
+    raise exception 'You do not have access to this business.';
+  end if;
+
   select p.track_inventory
     into v_tracks_inventory
   from public.products p
@@ -464,6 +468,10 @@ declare
   v_received numeric(14,2);
   v_refunded numeric(14,2);
 begin
+  if not private.has_business_access(new.business_id) then
+    raise exception 'You do not have access to this business.';
+  end if;
+
   select o.id
     into v_order_id
   from public.orders o
@@ -540,6 +548,10 @@ declare
   v_original_type text;
   v_reversed_so_far numeric(14,2);
 begin
+  if not private.has_business_access(new.business_id) then
+    raise exception 'You do not have access to this business.';
+  end if;
+
   if new.entry_type = 'reversal' then
     select e.amount, e.entry_type
       into v_original_amount, v_original_type
@@ -896,7 +908,23 @@ with check (
 -- Transaction ledgers (stock, payments, expenses) are intentionally insert-only.
 -- ---------------------------------------------------------------------------
 
-revoke all on all tables in schema public from anon;
+revoke all on table
+  public.profiles,
+  public.businesses,
+  public.business_members,
+  public.customers,
+  public.products,
+  public.stock_movements,
+  public.orders,
+  public.order_items,
+  public.payments,
+  public.expenses,
+  public.product_stock_levels,
+  public.order_financial_summary,
+  public.order_cost_summary,
+  public.business_expense_summary
+from anon, authenticated;
+
 grant usage on schema public to authenticated;
 
 grant select, update on public.profiles to authenticated;
