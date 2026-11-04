@@ -851,7 +851,7 @@ create policy customers_add_business
 on public.customers for insert to authenticated
 with check (
   (select private.has_business_access(business_id))
-  and (created_by is null or created_by = (select auth.uid()))
+  and created_by = (select auth.uid())
 );
 
 create policy customers_update_business
@@ -871,7 +871,7 @@ create policy products_add_business
 on public.products for insert to authenticated
 with check (
   (select private.has_business_access(business_id))
-  and (created_by is null or created_by = (select auth.uid()))
+  and created_by = (select auth.uid())
 );
 
 create policy products_update_business
@@ -887,7 +887,7 @@ create policy stock_movements_add_business
 on public.stock_movements for insert to authenticated
 with check (
   (select private.has_business_access(business_id))
-  and (created_by is null or created_by = (select auth.uid()))
+  and created_by = (select auth.uid())
 );
 
 create policy orders_read_business
@@ -898,7 +898,7 @@ create policy orders_add_business
 on public.orders for insert to authenticated
 with check (
   (select private.has_business_access(business_id))
-  and (created_by is null or created_by = (select auth.uid()))
+  and created_by = (select auth.uid())
 );
 
 create policy orders_update_business
@@ -931,7 +931,7 @@ create policy payments_add_business
 on public.payments for insert to authenticated
 with check (
   (select private.has_business_access(business_id))
-  and (recorded_by is null or recorded_by = (select auth.uid()))
+  and recorded_by = (select auth.uid())
 );
 
 create policy expenses_read_business
@@ -942,7 +942,7 @@ create policy expenses_add_business
 on public.expenses for insert to authenticated
 with check (
   (select private.has_business_access(business_id))
-  and (recorded_by is null or recorded_by = (select auth.uid()))
+  and recorded_by = (select auth.uid())
 );
 
 -- ---------------------------------------------------------------------------
