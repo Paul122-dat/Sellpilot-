@@ -288,6 +288,58 @@ export async function restoreProduct(productId: string): Promise<ProductActionRe
   return {};
 }
 
+/**
+ * Temporary Preview-only diagnostic. It deliberately attempts a stock
+ * reduction larger than the current balance. The archived-product guard
+ * must reject it before the negative-stock check. If the archived guard is
+ * missing, the negative-stock check still rejects it, so this test never
+ * changes the stock ledger.
+ */
+export async function testArchivedProductStockGuard(
+  productId: string,
+): Promise<{ diagnostic?: string; error?: string }> {
+  if (!/^[0-9a-f-]{36}$/i.test(productId)) {
+    return { error: "That product record is not valid." };
+  }
+
+  const workspace = await getAuthorizedWorkspace();
+  if ("error" in workspace) return workspace;
+
+  const { data: product, error: productError } = await workspace.supabase
+    .from("products")
+    .select("is_archived, track_inventory")
+    .eq("id", productId)
+    .eq("business_id", workspace.businessId)
+    .maybeSingle();
+
+  if (productError || !product) return { error: "We couldn't verify this product." };
+  if (!product.is_archived) return { error: "Archive the test product before running this check." };
+  if (!product.track_inventory) return { error: "Inventory tracking must be enabled for this test." };
+
+  const { error } = await workspace.supabase.from("stock_movements").insert({
+    business_id: workspace.businessId,
+    product_id: productId,
+    movement_type: "adjustment",
+    quantity_change: -6,
+    note: "Temporary archived-product protection diagnostic; expected to be rejected",
+    created_by: workspace.userId,
+  });
+
+  if (!error) {
+    return { error: "Unexpectedly, the stock movement was accepted. Stop testing and inspect the product stock immediately." };
+  }
+
+  if (error.message?.includes("product is archived")) {
+    return { diagnostic: "PASS: the database rejected the stock movement because the product is archived. No stock was changed." };
+  }
+
+  if (error.message?.includes("would make inventory negative")) {
+    return { diagnostic: "INCONCLUSIVE: the negative-stock rule rejected the request, but the archived-product rule did not run. Do not merge yet." };
+  }
+
+  return { error: "The test was rejected for an unexpected reason. Share this result with us: " + error.message.slice(0, 180) };
+}
+
 export async function recordStockAdjustment(formData: FormData): Promise<ProductActionResult> {
   const productId = String(formData.get("product_id") ?? "").trim();
   const direction = String(formData.get("direction") ?? "");
