@@ -2,10 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function safeNextPath(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-  return value;
+  // This callback currently needs only the onboarding destination.
+  // Keeping an explicit allowlist prevents open redirects.
+  return value === "/onboarding" ? "/onboarding" : "/";
 }
 
 export async function GET(request: NextRequest) {
