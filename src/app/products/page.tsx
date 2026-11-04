@@ -50,18 +50,14 @@ export default async function ProductsPage() {
     return <main className="min-h-screen bg-[var(--surface)] p-6"><p className="mx-auto max-w-3xl rounded-2xl bg-white p-6 text-sm text-slate-600">We couldn't load product images. Please refresh and try again.</p></main>;
   }
 
-  const imageUrlByPath = new Map(
-    (signedImages.data ?? [])
-      .filter((image) => Boolean(image.signedUrl))
-      .map((image) => [image.path, image.signedUrl as string]),
-  );
-  const stockByProduct = new Map((stock ?? []).map((row) => [row.product_id, row]));
-
   const records: ProductRecord[] = (products ?? []).map((product) => {
-    const level = stockByProduct.get(product.id);
+    const level = (stock ?? []).find((row) => row.product_id === product.id);
+    const image = product.image_path
+      ? (signedImages.data ?? []).find((item) => item.path === product.image_path)
+      : null;
     return {
       ...product,
-      image_url: product.image_path ? imageUrlByPath.get(product.image_path) ?? null : null,
+      image_url: image?.signedUrl ?? null,
       stock_on_hand: level?.stock_on_hand ?? null,
       stock_status: level?.stock_status ?? (product.track_inventory ? "low_stock" : "not_tracked"),
     } as ProductRecord;
