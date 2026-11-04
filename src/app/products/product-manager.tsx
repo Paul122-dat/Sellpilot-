@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { archiveProduct, createProduct, recordStockAdjustment, updateProduct } from "./actions";
 
@@ -16,6 +16,7 @@ export type ProductRecord = {
   low_stock_threshold: number;
   is_archived: boolean;
   created_at: string;
+  image_url: string | null;
   stock_on_hand: number | null;
   stock_status: "in_stock" | "low_stock" | "not_tracked";
 };
@@ -41,12 +42,18 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
   const [editing, setEditing] = useState<ProductRecord | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [stockProduct, setStockProduct] = useState("");
   const [stockDirection, setStockDirection] = useState<"add" | "remove">("add");
   const [stockQuantity, setStockQuantity] = useState("1");
   const [stockNote, setStockNote] = useState("");
   const [stockError, setStockError] = useState("");
+
+  useEffect(() => {
+    if (!imagePreview?.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(imagePreview);
+  }, [imagePreview]);
 
   const activeProducts = initialProducts.filter((product) => !product.is_archived);
   const lowStockCount = activeProducts.filter((product) => product.stock_status === "low_stock").length;
@@ -61,6 +68,7 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
   function openNew() {
     setEditing(null);
     setForm(emptyForm);
+    setImagePreview(null);
     setError("");
   }
 
@@ -75,6 +83,7 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
       track_inventory: product.track_inventory,
       low_stock_threshold: String(product.low_stock_threshold),
     });
+    setImagePreview(product.image_url);
     setError("");
   }
 
@@ -90,6 +99,7 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
       }
       setEditing(null);
       setForm(emptyForm);
+      setImagePreview(null);
       router.refresh();
     });
   }
@@ -141,7 +151,7 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
           <div className="mt-3 divide-y divide-slate-100">
             {filtered.length === 0 ? <div className="py-12 text-center"><p className="text-sm font-semibold text-slate-700">No products found</p><p className="mt-1 text-xs text-slate-500">Add a product or change your search.</p></div> : filtered.map((product) => (
               <button key={product.id} type="button" onClick={() => openEdit(product)} className="flex w-full items-center gap-3 py-4 text-left hover:bg-slate-50">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-orange-50 text-sm font-bold text-[var(--orange)]">{product.name.slice(0, 1).toUpperCase()}</span>
+                {product.image_url ? <img src={product.image_url} alt={product.name} className="h-12 w-12 shrink-0 rounded-xl border border-[var(--line)] object-cover" /> : <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-orange-50 text-sm font-bold text-[var(--orange)]">{product.name.slice(0, 1).toUpperCase()}</span>}
                 <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{product.name}</span><span className="mt-1 block truncate text-xs text-slate-500">{product.sku || "No SKU"} · {money(Number(product.selling_price))}</span></span>
                 <span className="text-right"><span className="block text-sm font-semibold text-slate-700">{product.stock_on_hand === null ? "Not tracked" : `${product.stock_on_hand} in stock`}</span><span className={`mt-1 block text-[11px] font-semibold ${product.is_archived ? "text-slate-400" : product.stock_status === "low_stock" ? "text-amber-600" : product.stock_status === "in_stock" ? "text-emerald-600" : "text-slate-400"}`}>{product.is_archived ? "Archived" : product.stock_status === "low_stock" ? "Low stock" : product.stock_status === "in_stock" ? "In stock" : "Not tracked"}</span></span>
               </button>
@@ -154,6 +164,10 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
             <h2 className="font-bold text-[var(--navy)]">{editing ? "Edit product" : "New product"}</h2>
             <p className="mt-1 text-xs leading-5 text-slate-500">Selling price is required. Cost price is optional until you know it.</p>
             <form key={editing?.id ?? "new"} onSubmit={submitProduct} className="mt-5 space-y-3">
+              <div className="rounded-xl border border-dashed border-slate-300 p-3">
+                <label className="block"><span className="mb-2 block text-xs font-semibold text-slate-600">Product photo (optional)</span><input name="image" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) setImagePreview(URL.createObjectURL(file)); }} className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[var(--orange)]" /><span className="mt-1 block text-[11px] text-slate-400">JPG, PNG or WebP · maximum 5 MB. Choose from your phone or take a photo.</span></label>
+                {imagePreview && <div className="mt-3 flex items-center gap-3"><img src={imagePreview} alt="Product photo preview" className="h-20 w-20 rounded-xl border border-[var(--line)] object-cover" /><span className="text-xs text-slate-500">Photo preview</span></div>}
+              </div>
               <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Product name *</span><input name="name" required maxLength={160} value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} placeholder="e.g. Classic T-shirt" className="w-full rounded-xl border border-[var(--line)] px-3.5 py-2.5 text-sm outline-none focus:border-orange-400" /></label>
               <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">SKU / product code</span><input name="sku" maxLength={80} value={form.sku} onChange={(e) => setForm((s) => ({ ...s, sku: e.target.value }))} placeholder="Optional unique code" className="w-full rounded-xl border border-[var(--line)] px-3.5 py-2.5 text-sm outline-none focus:border-orange-400" /></label>
               <div className="grid grid-cols-2 gap-3">
