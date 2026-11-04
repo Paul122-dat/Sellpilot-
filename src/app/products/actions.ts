@@ -103,6 +103,9 @@ function validateProduct(formData: FormData): ValidationResult<ValidatedProduct>
 
   if (!name) return { ok: false, error: "Enter a product name." };
   if (!selling.ok) return selling;
+  if (selling.value === null) {
+    return { ok: false, error: "Enter a valid selling price." };
+  }
   if (!cost.ok) return cost;
   if (!image.ok) return image;
   if (!/^\d{1,6}$/.test(thresholdRaw) || !Number.isSafeInteger(threshold) || threshold < 0) {
