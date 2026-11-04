@@ -357,6 +357,7 @@ create or replace function public.create_order(
 )
 returns uuid
 language plpgsql
+security definer
 set search_path = ''
 as $$
 declare
@@ -533,7 +534,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   v_order_status text;
   v_received numeric(14,2);
@@ -580,6 +581,8 @@ revoke all on function private.validate_refund_entry() from public, anon, authen
 
 -- Users can change operational fields only; monetary totals are controlled by
 -- order-item triggers and the atomic order-creation function.
+revoke insert on public.orders from authenticated;
+revoke insert, update, delete on public.order_items from authenticated;
 revoke update on public.orders from authenticated;
 grant update (order_status, expected_delivery_date, delivery_address, notes)
   on public.orders to authenticated;
