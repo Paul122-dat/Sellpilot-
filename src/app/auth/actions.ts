@@ -14,7 +14,7 @@ function readText(formData: FormData, key: string) {
 }
 
 function validEmail(email: string) {
-  return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);
+  return email.includes("@") && email.lastIndexOf(".") > email.indexOf("@");
 }
 
 export async function signUp(
