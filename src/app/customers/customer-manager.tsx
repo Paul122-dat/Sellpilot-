@@ -87,7 +87,7 @@ export default function CustomerManager({ initialCustomers }: { initialCustomers
   }
 
   const fields = [
-    { key: "name", label: "Customer name", required: true, placeholder: "e.g. Ada Okafor" },
+    { key: "name", label: "Customer name", placeholder: "e.g. Ada Okafor" },
     { key: "phone_number", label: "Phone number", placeholder: "+234..." },
     { key: "whatsapp_number", label: "WhatsApp number", placeholder: "If different from phone" },
     { key: "email", label: "Email address", placeholder: "name@example.com" },
@@ -119,7 +119,7 @@ export default function CustomerManager({ initialCustomers }: { initialCustomers
         <h2 className="font-bold text-[var(--navy)]">{editing ? "Edit customer" : "New customer"}</h2>
         <p className="mt-1 text-xs text-slate-500">Only the customer's name is required. Add other details when available.</p>
         <form key={editing?.id ?? "new"} onSubmit={submit} className="mt-5 space-y-3">
-          {fields.map((field) => <label key={field.key} className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">{field.label}{field.required ? " *" : ""}</span><input name={field.key} required={field.required} maxLength={field.key === "name" ? 160 : field.key === "email" ? 254 : 80} value={form[field.key]} onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))} placeholder={field.placeholder} className="w-full rounded-xl border border-[var(--line)] px-3.5 py-2.5 text-sm outline-none focus:border-orange-400" /></label>)}
+          {fields.map((field) => <label key={field.key} className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">{field.label}{field.key === "name" ? " *" : ""}</span><input name={field.key} required={field.key === "name"} maxLength={field.key === "name" ? 160 : field.key === "email" ? 254 : 80} value={form[field.key]} onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))} placeholder={field.placeholder} className="w-full rounded-xl border border-[var(--line)] px-3.5 py-2.5 text-sm outline-none focus:border-orange-400" /></label>)}
           <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Delivery address</span><textarea name="delivery_address" maxLength={500} rows={2} value={form.delivery_address} onChange={(event) => setForm((current) => ({ ...current, delivery_address: event.target.value }))} className="w-full rounded-xl border border-[var(--line)] px-3.5 py-2.5 text-sm outline-none focus:border-orange-400" placeholder="Customer's preferred delivery address" /></label>
           <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Notes</span><textarea name="notes" maxLength={2000} rows={3} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} className="w-full rounded-xl border border-[var(--line)] px-3.5 py-2.5 text-sm outline-none focus:border-orange-400" placeholder="Useful details about this customer" /></label>
           {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
