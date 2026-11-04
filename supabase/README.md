@@ -12,6 +12,7 @@ The Product & Inventory feature requires three additional migrations. Run all th
 5. `migrations/20261104000500_product_image_storage.sql`
 6. `migrations/20261104000600_simplify_product_image_storage_policies.sql`
 7. `migrations/20261104000700_prevent_archived_product_stock_changes.sql`
+8. `migrations/20261104000800_order_management.sql`
 
 The sixth migration replaces the initial Storage policy checks with UUID-validated business-membership checks. It is required for the current direct browser-to-Storage upload flow. The seventh migration updates the stock-validation trigger so archived products cannot receive stock movements, including requests that bypass the application interface.
 
@@ -28,12 +29,13 @@ Each script is a separate transaction. Wait for the success message after each p
 - Row Level Security policies for every public table.
 - Private authorization and validation trigger functions.
 
-The fifth migration creates a private Supabase Storage bucket for product photos and adds the image path to product records. The sixth migration defines the final private Storage access policies, scoped to members of the owning business. The seventh migration blocks stock movements for archived products at database level.
+The fifth migration creates a private Supabase Storage bucket for product photos and adds the image path to product records. The sixth migration defines the final private Storage access policies, scoped to members of the owning business. The seventh migration blocks stock movements for archived products at database level. The eighth migration adds transactional order creation, lifecycle validation, stock deduction on confirmation, stock restoration on cancellation, payment validation, and tighter write permissions for order records.
 
 ## Data rules
 
 - Business records are tenant-scoped. A signed-in user can access a business only if they own it or are recorded as a member.
 - Order status and payment status are separate. Payment status is calculated from payment and refund entries.
+- New orders begin as pending. Tracked stock is deducted only when an order is confirmed; cancelling a confirmed order restores the recorded quantities.
 - Order subtotals are recalculated from saved order-item snapshots.
 - Stock on hand is calculated from stock movements. Stock cannot become negative.
 - Payment and refund entries are append-only. A refund cannot exceed the unrefunded amount received.
