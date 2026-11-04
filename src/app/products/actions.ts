@@ -13,6 +13,25 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
 
 export type ProductActionResult = { error?: string };
 
+type ValidationResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string };
+
+type ProductValues = {
+  name: string;
+  sku: string | null;
+  description: string | null;
+  selling_price: number;
+  cost_price: number | null;
+  track_inventory: boolean;
+  low_stock_threshold: number;
+};
+
+type ValidatedProduct = {
+  values: ProductValues;
+  image: File | null;
+};
+
 async function getAuthorizedWorkspace() {
   const supabase = await createSupabaseServerClient();
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
@@ -41,54 +60,70 @@ function readText(formData: FormData, key: string, max: number) {
   return value ? value.slice(0, max) : null;
 }
 
-function readMoney(formData: FormData, key: string, required: boolean) {
+function readMoney(
+  formData: FormData,
+  key: string,
+  required: boolean,
+): ValidationResult<number | null> {
   const raw = String(formData.get(key) ?? "").trim();
-  if (!raw && !required) return { value: null as number | null };
-  if (!raw || !/^\\d{1,12}(\\.\\d{1,2})?$/.test(raw)) return { error: "Enter a valid amount with up to two decimal places." };
+  if (!raw && !required) return { ok: true, value: null };
+  if (!raw || !/^\d{1,12}(\.\d{1,2})?$/.test(raw)) {
+    return { ok: false, error: "Enter a valid amount with up to two decimal places." };
+  }
+
   const value = Number(raw);
-  if (!Number.isFinite(value) || value < 0 || value > 999999999999.99) return { error: "Enter a valid amount." };
-  return { value };
+  if (!Number.isFinite(value) || value < 0 || value > 999999999999.99) {
+    return { ok: false, error: "Enter a valid amount." };
+  }
+  return { ok: true, value };
 }
 
-function readProductImage(formData: FormData) {
+function readProductImage(formData: FormData): ValidationResult<File | null> {
   const value = formData.get("image");
-  if (!(value instanceof File) || value.size === 0) return { image: null as File | null };
-  if (!IMAGE_EXTENSIONS[value.type]) return { error: "Use a JPG, PNG or WebP product image." };
-  if (value.size > MAX_IMAGE_BYTES) return { error: "Product images must be 5 MB or smaller." };
-  return { image: value };
+  if (!(value instanceof File) || value.size === 0) return { ok: true, value: null };
+  if (!IMAGE_EXTENSIONS[value.type]) {
+    return { ok: false, error: "Use a JPG, PNG or WebP product image." };
+  }
+  if (value.size > MAX_IMAGE_BYTES) {
+    return { ok: false, error: "Product images must be 5 MB or smaller." };
+  }
+  return { ok: true, value };
 }
 
-function validateProduct(formData: FormData) {
+function validateProduct(formData: FormData): ValidationResult<ValidatedProduct> {
   const name = readText(formData, "name", 160);
   const sku = readText(formData, "sku", 80);
   const description = readText(formData, "description", 2000);
   const selling = readMoney(formData, "selling_price", true);
   const cost = readMoney(formData, "cost_price", false);
-  const imageResult = readProductImage(formData);
+  const image = readProductImage(formData);
   const thresholdRaw = String(formData.get("low_stock_threshold") ?? "5").trim();
   const threshold = Number(thresholdRaw);
   const trackInventory = formData.get("track_inventory") === "on";
 
-  if (!name) return { error: "Enter a product name." } as const;
-  if ("error" in selling) return selling;
-  if ("error" in cost) return cost;
-  if ("error" in imageResult) return imageResult;
-  if (!/^\\d{1,6}$/.test(thresholdRaw) || !Number.isSafeInteger(threshold) || threshold < 0) {
-    return { error: "Enter a whole-number low-stock threshold (0 or more)." } as const;
+  if (!name) return { ok: false, error: "Enter a product name." };
+  if (!selling.ok) return selling;
+  if (!cost.ok) return cost;
+  if (!image.ok) return image;
+  if (!/^\d{1,6}$/.test(thresholdRaw) || !Number.isSafeInteger(threshold) || threshold < 0) {
+    return { ok: false, error: "Enter a whole-number low-stock threshold (0 or more)." };
   }
 
   return {
-    values: {
-      name,
-      sku,
-      description,
-      selling_price: selling.value!,
-      cost_price: cost.value,
-      track_inventory: trackInventory,
-      low_stock_threshold: threshold,
+    ok: true,
+    value: {
+      values: {
+        name,
+        sku,
+        description,
+        selling_price: selling.value,
+        cost_price: cost.value,
+        track_inventory: trackInventory,
+        low_stock_threshold: threshold,
+      },
+      image: image.value,
     },
-    image: imageResult.image,
-  } as const;
+  };
 }
 
 async function uploadProductImage(
@@ -96,36 +131,44 @@ async function uploadProductImage(
   businessId: string,
   productId: string,
   image: File,
-) {
+): Promise<ValidationResult<string>> {
   const extension = IMAGE_EXTENSIONS[image.type];
-  const path = `${businessId}/${productId}/${crypto.randomUUID()}.${extension}`;
+  const path = businessId + "/" + productId + "/" + crypto.randomUUID() + "." + extension;
   const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, image, {
     cacheControl: "3600",
     contentType: image.type,
     upsert: false,
   });
-  if (error) return { error: "We couldn't upload that image. Please try another JPG, PNG or WebP file." } as const;
-  return { path } as const;
+  if (error) {
+    return { ok: false, error: "We couldn't upload that image. Please try another JPG, PNG or WebP file." };
+  }
+  return { ok: true, value: path };
 }
 
 export async function createProduct(formData: FormData): Promise<ProductActionResult> {
-  const validated = validateProduct(formData);
-  if ("error" in validated) return validated;
+  const validation = validateProduct(formData);
+  if (!validation.ok) return { error: validation.error };
+
   const workspace = await getAuthorizedWorkspace();
   if ("error" in workspace) return workspace;
 
   const productId = crypto.randomUUID();
   let imagePath: string | null = null;
 
-  if (validated.image) {
-    const uploaded = await uploadProductImage(workspace.supabase, workspace.businessId, productId, validated.image);
-    if ("error" in uploaded) return uploaded;
-    imagePath = uploaded.path;
+  if (validation.value.image) {
+    const uploaded = await uploadProductImage(
+      workspace.supabase,
+      workspace.businessId,
+      productId,
+      validation.value.image,
+    );
+    if (!uploaded.ok) return { error: uploaded.error };
+    imagePath = uploaded.value;
   }
 
   const { error } = await workspace.supabase.from("products").insert({
     id: productId,
-    ...validated.values,
+    ...validation.value.values,
     image_path: imagePath,
     business_id: workspace.businessId,
     created_by: workspace.userId,
@@ -142,10 +185,17 @@ export async function createProduct(formData: FormData): Promise<ProductActionRe
   return {};
 }
 
-export async function updateProduct(productId: string, formData: FormData): Promise<ProductActionResult> {
-  if (!/^[0-9a-f-]{36}$/i.test(productId)) return { error: "That product record is not valid." };
-  const validated = validateProduct(formData);
-  if ("error" in validated) return validated;
+export async function updateProduct(
+  productId: string,
+  formData: FormData,
+): Promise<ProductActionResult> {
+  if (!/^[0-9a-f-]{36}$/i.test(productId)) {
+    return { error: "That product record is not valid." };
+  }
+
+  const validation = validateProduct(formData);
+  if (!validation.ok) return { error: validation.error };
+
   const workspace = await getAuthorizedWorkspace();
   if ("error" in workspace) return workspace;
 
@@ -156,18 +206,25 @@ export async function updateProduct(productId: string, formData: FormData): Prom
     .eq("business_id", workspace.businessId)
     .maybeSingle();
 
-  if (readError || !existing) return { error: "We couldn't find that product in your workspace." };
+  if (readError || !existing) {
+    return { error: "We couldn't find that product in your workspace." };
+  }
 
   let newImagePath: string | null = null;
-  if (validated.image) {
-    const uploaded = await uploadProductImage(workspace.supabase, workspace.businessId, productId, validated.image);
-    if ("error" in uploaded) return uploaded;
-    newImagePath = uploaded.path;
+  if (validation.value.image) {
+    const uploaded = await uploadProductImage(
+      workspace.supabase,
+      workspace.businessId,
+      productId,
+      validation.value.image,
+    );
+    if (!uploaded.ok) return { error: uploaded.error };
+    newImagePath = uploaded.value;
   }
 
   const updateValues = newImagePath
-    ? { ...validated.values, image_path: newImagePath }
-    : validated.values;
+    ? { ...validation.value.values, image_path: newImagePath }
+    : validation.value.values;
 
   const { data, error } = await workspace.supabase
     .from("products")
@@ -179,7 +236,9 @@ export async function updateProduct(productId: string, formData: FormData): Prom
 
   if (error || !data) {
     if (newImagePath) await workspace.supabase.storage.from(IMAGE_BUCKET).remove([newImagePath]);
-    if (error?.code === "23505") return { error: "That SKU is already used by another product." };
+    if (error?.code === "23505") {
+      return { error: "That SKU is already used by another product." };
+    }
     return { error: "We couldn't update this product. Refresh and try again." };
   }
 
@@ -193,7 +252,10 @@ export async function updateProduct(productId: string, formData: FormData): Prom
 }
 
 export async function archiveProduct(productId: string): Promise<ProductActionResult> {
-  if (!/^[0-9a-f-]{36}$/i.test(productId)) return { error: "That product record is not valid." };
+  if (!/^[0-9a-f-]{36}$/i.test(productId)) {
+    return { error: "That product record is not valid." };
+  }
+
   const workspace = await getAuthorizedWorkspace();
   if ("error" in workspace) return workspace;
 
@@ -205,7 +267,10 @@ export async function archiveProduct(productId: string): Promise<ProductActionRe
     .select("id")
     .maybeSingle();
 
-  if (error || !data) return { error: "We couldn't archive this product. Refresh and try again." };
+  if (error || !data) {
+    return { error: "We couldn't archive this product. Refresh and try again." };
+  }
+
   revalidatePath("/products");
   revalidatePath("/");
   return {};
@@ -218,8 +283,12 @@ export async function recordStockAdjustment(formData: FormData): Promise<Product
   const note = readText(formData, "note", 300);
 
   if (!/^[0-9a-f-]{36}$/i.test(productId)) return { error: "Choose a valid product." };
-  if (direction !== "add" && direction !== "remove") return { error: "Choose whether to add or remove stock." };
-  if (!/^\\d{1,6}$/.test(quantityRaw) || Number(quantityRaw) < 1) return { error: "Enter a whole quantity greater than zero." };
+  if (direction !== "add" && direction !== "remove") {
+    return { error: "Choose whether to add or remove stock." };
+  }
+  if (!/^\d{1,6}$/.test(quantityRaw) || Number(quantityRaw) < 1) {
+    return { error: "Enter a whole quantity greater than zero." };
+  }
 
   const quantity = Number(quantityRaw) * (direction === "add" ? 1 : -1);
   const workspace = await getAuthorizedWorkspace();
@@ -235,8 +304,12 @@ export async function recordStockAdjustment(formData: FormData): Promise<Product
   });
 
   if (error) {
-    if (error.message?.includes("negative")) return { error: "There isn't enough stock for that reduction." };
-    if (error.message?.includes("does not have tracked inventory")) return { error: "Inventory tracking is turned off for this product." };
+    if (error.message?.includes("negative")) {
+      return { error: "There isn't enough stock for that reduction." };
+    }
+    if (error.message?.includes("does not have tracked inventory")) {
+      return { error: "Inventory tracking is turned off for this product." };
+    }
     return { error: "We couldn't record this stock adjustment. Check the product and quantity." };
   }
 
