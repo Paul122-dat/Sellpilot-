@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createCustomer, updateCustomer } from "./actions";
 
@@ -68,7 +68,7 @@ export default function CustomerManager({ initialCustomers }: { initialCustomers
     setError("");
   }
 
-  function submit(event: React.FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     const formData = new FormData(event.currentTarget);
