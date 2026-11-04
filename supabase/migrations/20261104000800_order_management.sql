@@ -273,15 +273,13 @@ begin
     raise exception 'The selected product was not found for this business.';
   end if;
 
-  if v_tracks_inventory is not true then
-    raise exception 'This product does not have tracked inventory.';
-  end if;
-
-  if v_is_archived then
+  -- If a product was archived or inventory tracking was later switched off,
+  -- allow only the exact stock reversal of a sale from a cancelled order.
+  if v_is_archived or v_tracks_inventory is not true then
     if new.movement_type <> 'return'
       or new.reference is null
       or new.reference not like 'cancel:%' then
-      raise exception 'This product is archived and cannot receive stock movements.';
+      raise exception 'This product cannot receive stock movements in its current state.';
     end if;
 
     v_order_text := substring(new.reference from 8);
@@ -426,7 +424,7 @@ begin
   end if;
 
   v_order_number := 'SP-' || to_char(now(), 'YYMMDD') || '-' ||
-    upper(substring(replace(v_order_id::text, '-', '') from 1 for 6));
+    upper(substring(replace(v_order_id::text, '-', '') from 1 for 8));
 
   insert into public.orders (
     id, business_id, order_number, customer_id, customer_name, customer_phone,
