@@ -70,6 +70,7 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
     setEditing(null);
     setForm(emptyForm);
     setImagePreview(null);
+    setFormVersion((version) => version + 1);
     setError("");
   }
 
