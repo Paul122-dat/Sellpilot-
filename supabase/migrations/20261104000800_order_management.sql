@@ -526,6 +526,58 @@ grant execute on function public.create_order(
   numeric, text, text, text
 ) to authenticated;
 
+-- Keep cancelled orders from accepting new payments. Refunds remain bounded
+-- by the amount actually received, including earlier refunds.
+create or replace function private.validate_refund_entry()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  v_order_status text;
+  v_received numeric(14,2);
+  v_refunded numeric(14,2);
+begin
+  if not private.has_business_access(new.business_id) then
+    raise exception 'You do not have access to this business.';
+  end if;
+
+  select o.order_status
+    into v_order_status
+  from public.orders o
+  where o.id = new.order_id
+    and o.business_id = new.business_id
+  for update;
+
+  if not found then
+    raise exception 'The selected order was not found for this business.';
+  end if;
+
+  if new.transaction_type = 'payment' and v_order_status = 'cancelled' then
+    raise exception 'A cancelled order cannot accept another payment.';
+  end if;
+
+  if new.transaction_type = 'refund' then
+    select
+      coalesce(sum(p.amount) filter (where p.transaction_type = 'payment'), 0),
+      coalesce(sum(p.amount) filter (where p.transaction_type = 'refund'), 0)
+    into v_received, v_refunded
+    from public.payments p
+    where p.order_id = new.order_id
+      and p.business_id = new.business_id;
+
+    if new.amount > v_received - v_refunded then
+      raise exception 'A refund cannot exceed the amount received and not already refunded.';
+    end if;
+  end if;
+
+  return new;
+end;
+$;
+
+revoke all on function private.validate_refund_entry() from public, anon, authenticated;
+
 -- Users can change operational fields only; monetary totals are controlled by
 -- order-item triggers and the atomic order-creation function.
 revoke update on public.orders from authenticated;
