@@ -43,6 +43,7 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [formVersion, setFormVersion] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [stockProduct, setStockProduct] = useState("");
   const [stockDirection, setStockDirection] = useState<"add" | "remove">("add");
@@ -100,6 +101,7 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
       setEditing(null);
       setForm(emptyForm);
       setImagePreview(null);
+      setFormVersion((version) => version + 1);
       router.refresh();
     });
   }
@@ -163,7 +165,7 @@ export default function ProductManager({ initialProducts }: { initialProducts: P
           <section className="rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm sm:p-6">
             <h2 className="font-bold text-[var(--navy)]">{editing ? "Edit product" : "New product"}</h2>
             <p className="mt-1 text-xs leading-5 text-slate-500">Selling price is required. Cost price is optional until you know it.</p>
-            <form key={editing?.id ?? "new"} onSubmit={submitProduct} className="mt-5 space-y-3">
+            <form key={`${editing?.id ?? "new"}-${formVersion}`} onSubmit={submitProduct} className="mt-5 space-y-3">
               <div className="rounded-xl border border-dashed border-slate-300 p-3">
                 <label className="block"><span className="mb-2 block text-xs font-semibold text-slate-600">Product photo (optional)</span><input name="image" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) setImagePreview(URL.createObjectURL(file)); }} className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[var(--orange)]" /><span className="mt-1 block text-[11px] text-slate-400">JPG, PNG or WebP · maximum 5 MB. Choose from your phone or take a photo.</span></label>
                 {imagePreview && <div className="mt-3 flex items-center gap-3"><img src={imagePreview} alt="Product photo preview" className="h-20 w-20 rounded-xl border border-[var(--line)] object-cover" /><span className="text-xs text-slate-500">Photo preview</span></div>}
