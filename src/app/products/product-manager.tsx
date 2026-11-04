@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition, type FormEvent } from "rea
 import { useRouter } from "next/navigation";
 import {
   archiveProduct,
+  restoreProduct,
   attachProductImage,
   createProduct,
   recordStockAdjustment,
@@ -239,6 +240,22 @@ export default function ProductManager({
     });
   }
 
+  function restore(product: ProductRecord) {
+    startTransition(async () => {
+      const result = await restoreProduct(product.id);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setEditing(null);
+      setForm(emptyForm);
+      setImagePreview(null);
+      setFormVersion((version) => version + 1);
+      setError("");
+      router.refresh();
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-3">
@@ -287,13 +304,13 @@ export default function ProductManager({
               {form.track_inventory && <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Low-stock warning at</span><input name="low_stock_threshold" type="number" min="0" max="999999" step="1" value={form.low_stock_threshold} onChange={(e) => setForm((s) => ({ ...s, low_stock_threshold: e.target.value }))} className="w-full rounded-xl border border-[var(--line)] px-3.5 py-2.5 text-sm outline-none focus:border-orange-400" /></label>}
               {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
               <div className="flex gap-2 pt-1"><button disabled={isPending} type="submit" className="flex-1 rounded-xl bg-[var(--orange)] px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{isPending ? "Saving..." : editing ? "Save changes" : "Save product"}</button>{editing && <button type="button" onClick={openNew} className="rounded-xl border border-[var(--line)] px-4 py-3 text-sm font-semibold text-slate-600">Cancel</button>}</div>
-              {editing && !editing.is_archived && <button disabled={isPending} type="button" onClick={() => archive(editing)} className="w-full rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 disabled:opacity-60">Archive product</button>}
+              {editing && !editing.is_archived && <button disabled={isPending} type="button" onClick={() => archive(editing)} className="w-full rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 disabled:opacity-60">Archive product</button>}{editing?.is_archived && <button disabled={isPending} type="button" onClick={() => restore(editing)} className="w-full rounded-xl border border-emerald-200 px-4 py-2.5 text-sm font-semibold text-emerald-700 disabled:opacity-60">Restore product</button>}
             </form>
           </section>
 
           <section className="rounded-2xl border border-[var(--line)] bg-white p-5 shadow-sm sm:p-6">
             <h2 className="font-bold text-[var(--navy)]">Adjust stock</h2>
-            <p className="mt-1 text-xs leading-5 text-slate-500">Record opening stock, new purchases, returns or corrections. Every adjustment is saved in the stock history.</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Record opening stock or correct your current count. Changes are saved as stock adjustments in the stock ledger.</p>
             <form onSubmit={submitStock} className="mt-5 space-y-3">
               <label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Product *</span><select name="product_id" required value={stockProduct} onChange={(e) => setStockProduct(e.target.value)} className="w-full rounded-xl border border-[var(--line)] bg-white px-3.5 py-2.5 text-sm"><option value="">Choose a product</option>{activeProducts.filter((p) => p.track_inventory).map((p) => <option key={p.id} value={p.id}>{p.name} · {p.stock_on_hand ?? 0} in stock</option>)}</select></label>
               <div className="grid grid-cols-2 gap-3"><label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Action</span><select name="direction" value={stockDirection} onChange={(e) => setStockDirection(e.target.value as "add" | "remove")} className="w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm"><option value="add">Add stock</option><option value="remove">Remove stock</option></select></label><label className="block"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Quantity *</span><input name="quantity" type="number" min="1" max="999999" step="1" required value={stockQuantity} onChange={(e) => setStockQuantity(e.target.value)} className="w-full rounded-xl border border-[var(--line)] px-3 py-2.5 text-sm" /></label></div>
