@@ -95,7 +95,9 @@ export default function OrderManager({
   const selectedOrder = orders.find((order) => order.id === selectedId) ?? null;
   const selectedCustomer = customers.find((customer) => customer.id === customerId) ?? null;
   const activeOrders = orders.filter((order) => !["delivered", "cancelled"].includes(order.order_status));
-  const outstandingAmount = activeOrders.reduce((sum, order) => sum + Math.max(0, order.balance_due), 0);
+  const outstandingAmount = orders
+    .filter((order) => order.order_status !== "cancelled")
+    .reduce((sum, order) => sum + Math.max(0, order.balance_due), 0);
   const flowIndex = selectedOrder ? ORDER_FLOW.indexOf(selectedOrder.order_status as typeof ORDER_FLOW[number]) : -1;
   const nextStatus = flowIndex >= 0 ? ORDER_FLOW[flowIndex + 1] : undefined;
 
