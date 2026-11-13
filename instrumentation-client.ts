@@ -4,7 +4,27 @@ Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   environment: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT,
   enabled: Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN),
-  sendDefaultPii: false,
+  dataCollection: {
+    userInfo: false,
+    cookies: false,
+    httpHeaders: {
+      request: false,
+      response: false
+    },
+    httpBodies: [],
+    urlQueryParams: false,
+    genAI: {
+      inputs: false,
+      outputs: false
+    },
+    databaseQueryData: false,
+    graphQL: {
+      document: false,
+      variables: false
+    },
+    stackFrameVariables: false
+  },
+  enableLogs: false,
   // Start with error monitoring only. Tracing and Session Replay remain disabled
   // until their data collection and usage are reviewed separately.
   tracesSampleRate: 0,
