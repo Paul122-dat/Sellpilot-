@@ -2,7 +2,12 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
-  poweredByHeader: false
+  poweredByHeader: false,
+  env: {
+    // This non-secret deployment label is safe to expose to the browser bundle.
+    NEXT_PUBLIC_SENTRY_ENVIRONMENT:
+      process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development"
+  }
 };
 
 export default withSentryConfig(nextConfig, {
