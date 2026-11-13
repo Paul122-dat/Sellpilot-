@@ -18,5 +18,6 @@ export default withSentryConfig(nextConfig, {
   sourcemaps: {
     deleteSourcemapsAfterUpload: true
   },
-  silent: !process.env.CI
+  silent: !process.env.CI,
+  telemetry: false
 });
