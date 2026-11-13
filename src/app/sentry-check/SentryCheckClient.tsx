@@ -1,25 +1,54 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useState } from "react";
 
 export default function SentryCheckClient() {
-  const [status, setStatus] = useState("Ready to send one controlled test error.");
+  const [serverStatus, setServerStatus] = useState("Ready to send one controlled server-side test error.");
+  const [browserStatus, setBrowserStatus] = useState("Ready to send one controlled browser-side test error.");
 
-  async function sendTestError() {
-    setStatus("Sending test error…");
+  async function sendServerTestError() {
+    setServerStatus("Sending server-side test error…");
 
     try {
       const response = await fetch("/api/sentry-check", { method: "POST" });
 
       if (response.status === 500) {
-        setStatus("The preview endpoint returned the expected error. Check the Sentry project for the test event.");
+        setServerStatus("The preview endpoint returned the expected error. Check Sentry for the server-side test event.");
       } else {
-        setStatus(`Unexpected response: ${response.status}. Check the deployment logs.`);
+        setServerStatus(`Unexpected response: ${response.status}. Check the deployment logs.`);
       }
     } catch {
-      setStatus("The request could not be completed. Check the preview deployment.");
+      setServerStatus("The request could not be completed. Check the preview deployment.");
     }
   }
+
+  async function sendBrowserTestError() {
+    setBrowserStatus("Sending browser-side test error…");
+
+    try {
+      Sentry.captureException(new Error("SellPilot Sentry browser preview smoke test"));
+      const flushed = await Sentry.flush(2000);
+
+      setBrowserStatus(
+        flushed
+          ? "Browser-side test event sent. Check Sentry for the browser test issue."
+          : "The event was captured locally, but Sentry did not confirm delivery within 2 seconds. Check Sentry again shortly."
+      );
+    } catch {
+      setBrowserStatus("The browser test could not be sent. Check the browser console and Preview deployment.");
+    }
+  }
+
+  const buttonStyle = {
+    border: 0,
+    borderRadius: "10px",
+    padding: "12px 20px",
+    background: "#F97316",
+    color: "#FFFFFF",
+    fontWeight: 700,
+    cursor: "pointer"
+  } as const;
 
   return (
     <main
@@ -37,28 +66,31 @@ export default function SentryCheckClient() {
         <p style={{ color: "#1E293B", fontWeight: 700, letterSpacing: "0.1em" }}>
           SELLPILOT · MONITORING CHECK
         </p>
-        <h1 style={{ fontSize: "28px", lineHeight: 1.2 }}>Send a test event</h1>
+        <h1 style={{ fontSize: "28px", lineHeight: 1.2 }}>Test error reporting</h1>
         <p style={{ color: "#475569", lineHeight: 1.6 }}>
-          This preview-only check intentionally triggers one server error so we can confirm that Sentry receives it. No customer information is submitted.
+          These controls intentionally send test exceptions from the Preview environment. No customer information is submitted.
         </p>
-        <button
-          type="button"
-          onClick={sendTestError}
-          style={{
-            border: 0,
-            borderRadius: "10px",
-            padding: "12px 20px",
-            background: "#F97316",
-            color: "#FFFFFF",
-            fontWeight: 700,
-            cursor: "pointer"
-          }}
-        >
-          Send test error
-        </button>
-        <p role="status" aria-live="polite" style={{ marginTop: "16px", color: "#1E293B" }}>
-          {status}
-        </p>
+
+        <section style={{ marginTop: "24px" }}>
+          <h2 style={{ fontSize: "18px", marginBottom: "8px" }}>Server-side test</h2>
+          <button type="button" onClick={sendServerTestError} style={buttonStyle}>
+            Send server test error
+          </button>
+          <p role="status" aria-live="polite" style={{ marginTop: "12px", color: "#1E293B" }}>
+            {serverStatus}
+          </p>
+        </section>
+
+        <section style={{ marginTop: "24px" }}>
+          <h2 style={{ fontSize: "18px", marginBottom: "8px" }}>Browser-side test</h2>
+          <button type="button" onClick={sendBrowserTestError} style={buttonStyle}>
+            Send browser test error
+          </button>
+          <p role="status" aria-live="polite" style={{ marginTop: "12px", color: "#1E293B" }}>
+            {browserStatus}
+          </p>
+        </section>
+
         <p style={{ marginTop: "24px", color: "#64748B", fontSize: "13px" }}>
           This diagnostic page and endpoint are disabled on production deployments.
         </p>
