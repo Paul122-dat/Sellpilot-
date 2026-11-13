@@ -24,7 +24,6 @@ Sentry.init({
     },
     stackFrameVariables: false
   },
-  enableLogs: false,
   tracesSampleRate: 0,
   beforeSend(event) {
     if (event.user) {
