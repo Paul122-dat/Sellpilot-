@@ -1,3 +1,17 @@
 import type { NextConfig } from "next";
-const nextConfig: NextConfig = { poweredByHeader: false };
-export default nextConfig;
+import { withSentryConfig } from "@sentry/nextjs";
+
+const nextConfig: NextConfig = {
+  poweredByHeader: false
+};
+
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  widenClientFileUpload: true,
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true
+  },
+  silent: !process.env.CI
+});
