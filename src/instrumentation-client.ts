@@ -24,7 +24,6 @@ Sentry.init({
     },
     stackFrameVariables: false
   },
-  enableLogs: false,
   // Start with error monitoring only. Tracing and Session Replay remain disabled
   // until their data collection and usage are reviewed separately.
   tracesSampleRate: 0,
