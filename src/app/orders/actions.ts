@@ -10,7 +10,7 @@ export type OrderActionResult = {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAYMENT_METHODS = ["cash", "bank_transfer", "card", "online", "other"] as const;
-const SALES_CHANNELS = ["whatsapp", "instagram", "in_person", "other"] as const;
+const SALES_CHANNELS = ["whatsapp", "instagram", "tiktok", "in_person", "other"] as const;
 const ORDER_STATUSES = ["confirmed", "processing", "ready", "dispatched", "delivered", "cancelled"] as const;
 
 async function getAuthorizedWorkspace() {
