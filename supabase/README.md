@@ -29,7 +29,7 @@ Each script is a separate transaction. Wait for the success message after each p
 - Row Level Security policies for every public table.
 - Private authorization and validation trigger functions.
 
-The fifth migration creates a private Supabase Storage bucket for product photos and adds the image path to product records. The sixth migration defines the final private Storage access policies, scoped to members of the owning business. The seventh migration blocks stock movements for archived products at database level. The eighth migration adds transactional order creation, lifecycle validation, stock deduction on confirmation, stock restoration on cancellation, payment validation, and tighter write permissions for order records.
+The fifth migration creates a private Supabase Storage bucket for product photos and adds the image path to product records. The sixth migration defines the final private Storage access policies, scoped to members of the owning business. The seventh migration blocks stock movements for archived products at database level. The eighth migration adds transactional order creation, lifecycle validation, stock deduction on confirmation, stock restoration on cancellation, payment validation, TikTok as a recorded sales channel, and tighter write permissions for order records.
 
 ## Data rules
 
