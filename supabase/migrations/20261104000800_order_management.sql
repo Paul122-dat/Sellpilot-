@@ -2,6 +2,15 @@
 -- Apply once, after migrations 001-007.
 begin;
 
+-- Expand the database-level order-source constraint before accepting TikTok
+-- in the application and transactional order-creation function.
+alter table public.orders
+  drop constraint if exists orders_sales_channel_check;
+
+alter table public.orders
+  add constraint orders_sales_channel_check
+  check (sales_channel in ('whatsapp', 'instagram', 'tiktok', 'in_person', 'other'));
+
 -- Order-item changes are allowed only while an order is pending. Once confirmed,
 -- item and price snapshots become immutable so stock movements cannot drift.
 create or replace function private.prevent_non_pending_order_item_changes()
@@ -378,7 +387,7 @@ begin
     raise exception 'You do not have access to this business.';
   end if;
 
-  if p_sales_channel not in ('whatsapp', 'instagram', 'in_person', 'other') then
+  if p_sales_channel not in ('whatsapp', 'instagram', 'tiktok', 'in_person', 'other') then
     raise exception 'Choose a valid sales channel.';
   end if;
 
